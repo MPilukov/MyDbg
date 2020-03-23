@@ -62,25 +62,27 @@ namespace MyDbg
                 var runTime = clr.CreateRuntime();
 
                 var heap = runTime.Heap;
-                var types = new Dictionary<string, int>();
+                var typeCounter = new Dictionary<string, int>();
+                var types = new Dictionary<string, ObjectInfo>();
 
                 foreach (var obj in heap.EnumerateObjects())
                 {
                     var gen = heap.GetGeneration(obj);
 
-                    var typeName = GetTypeName(obj);                    
+                    var typeData = GetTypeData(obj);                    
 
-                    if (types.ContainsKey(typeName))
+                    if (typeCounter.ContainsKey(typeData.TypeName))
                     {
-                        types[typeName] = types[typeName] + 1;
+                        typeCounter[typeData.TypeName] = typeCounter[typeData.TypeName] + 1;                        
                     }
                     else
                     {
-                        types.Add(typeName, 1);
+                        typeCounter.Add(typeData.TypeName, 1);
+                        types.Add(typeData.TypeName, typeData);
                     }
                 }
 
-                foreach (var typeData in types.OrderByDescending(x => x.Value).Where(x => x.Value > 100))
+                foreach (var typeData in typeCounter.OrderByDescending(x => x.Value).Where(x => x.Value > 100))
                 {
                     trace($"Type : {typeData.Key} ({typeData.Value})");
                 }
@@ -96,37 +98,116 @@ namespace MyDbg
             }
         }
 
-        private static string GetTypeName(ClrObject obj)
+        private static ObjectInfo SwithType(string typeName)
+        {
+            switch (typeName)
+            {
+                case "Free":
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                        IsFree = true,
+                    };
+                case "System.Exception":
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+                case "System.SystemException":
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+                case "System.Object":
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+                case "System.AppDomain":
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+            }
+
+            return null;
+        }
+
+        private static ObjectInfo GetTypeData(ClrObject obj)
         {
             var typeName = obj.Type.Name.ToString();
 
+            var data = SwithType(typeName);
+            if (data != null)
+            {
+                return data;
+            }
+
+            var baseType = obj.Type.BaseType?.ToString() ?? "";
+            var baseData = SwithType(baseType);
+            if (baseData != null)
+            {
+                return baseData;
+            }
+
             if (typeName.Contains("System.RuntimeType"))
             {
-                var baseType = obj.Type.BaseType.ToString();
                 if (baseType.Contains("Microsoft.Diagnostics.Runtime"))
                 {
-                    return "Microsoft.Diagnostics.Runtime";
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName, // "Microsoft.Diagnostics.Runtime";
+                    };                    
                 }
                 else if (baseType.Contains("System.Reflection"))
                 {
-                    return "System.Reflection";
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName, // "System.Reflection";
+                    };
                 }
                 else if (baseType.Contains("System.Object"))
                 {
-                    return "System.Object";
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName, 
+                    };
                 }
                 else if (baseType.Contains("System.Array"))
                 {
-                    return "System.Array";
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+                }
+                else if (baseType.Contains("ystem.Collections.Generic.EqualityComparer"))
+                {
+                    return new ObjectInfo
+                    {
+                        TypeName = typeName,
+                    };
+                }
+                else if (baseType.Contains("System.ValueType"))
+                {
+                    return new ObjectInfo
+                    {
+                        TypeName = baseType,
+                    };
                 }
                 else
                 {
-                    return "";
+                    return new ObjectInfo
+                    {
+                        TypeName = baseType,
+                    };
                 }
             }
             else
             {
-                return typeName;
+                return new ObjectInfo
+                {
+                    TypeName = typeName,
+                };
             }
         }
     }
